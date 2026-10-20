@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>強化学習（Q-Learning）スネークAI</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #1e1e1e;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0;
+      padding: 20px;
+    }
+    canvas {
+      border: 3px solid #444;
+      background: #000;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    .controls {
+      margin-top: 15px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .stats {
+      margin-top: 15px;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+    button {
+      padding: 8px 16px;
+      background: #007acc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover { background: #005999; }
+  </style>
+</head>
+<body>
+
+  <h1>強化学習 (Q-Learning) スネークAI</h1>
+  <canvas id="game" width="300" height="300"></canvas>
+
+  <div class="controls">
+    <label>速度: <input type="range" id="speed" min="1" max="100" value="30"></label>
+    <button id="reset-q">Qテーブルをリセット</button>
+  </div>
+
+  <div class="stats">
+    <div>エピソード（ゲーム数）: <span id="episodes">0</span></div>
+    <div>ハイスコア: <span id="high-score">0</span></div>
+    <div>現在のスコア: <span id="current-score">0</span></div>
+    <div>探索率 ($\epsilon$): <span id="epsilon">1.00</span></div>
+    <div>学習した状態数: <span id="q-size">0</span></div>
+  </div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+const GRID_SIZE = 10;
+const TILE_COUNT = canvas.width / GRID_SIZE;
+
+// --- ゲーム状態 ---
+let snake = [];
+let food = { x: 0, y: 0 };
+let dir = { x: 1, y: 0 };
+let score = 0;
+let highScore = 0;
+let episode = 0;
+
+// --- Q-Learning パラメータ ---
+const alpha = 0.2;     // 学習率
+const gamma = 0.9;     // 割引率
+let epsilon = 1.0;     // 探索率（最初はいろいろ試す）
+const epsilonMin = 0.01;
+const epsilonDecay = 0.995;
+
+const QTable = {}; // 状態-行動価値テーブル
+
+// アクション定義 (相対方向: 0: 直進, 1: 右折, 2: 左折)
+const ACTIONS = [0, 1, 2];
+
+function getQ(stateKey, action) {
+  if (!QTable[stateKey]) QTable[stateKey] = [0, 0, 0];
+  return QTable[stateKey][action];
+}
+
+function setQ(stateKey, action, value) {
+  if (!QTable[stateKey]) QTable[stateKey] = [0, 0, 0];
+  QTable[stateKey][action] = value;
+}
+
+// 蛇の周辺状況から「状態（State）」を抽出
+function getState() {
+  const head = snake[0];
+
+  // 直進、右、左の方向ベクトルを計算
+  const dirF = dir;
+  const dirR = { x: -dir.y, y: dir.x };
+  const dirL = { x: dir.y, y: -dir.x };
+
+  // 各方向に障害物（壁または自分の体）があるか
+  const isDanger = (d) => {
+    const nx = head.x + d.x;
+    const ny = head.y + d.y;
+    if (nx < 0 || nx >= TILE_COUNT || ny < 0 || ny >= TILE_COUNT) return 1;
+    return snake.some(s => s.x === nx && s.y === ny) ? 1 : 0;
+  };
+
+  // 餌の位置（前方/後方、右/左）
+  const foodDirX = food.x > head.x ? 1 : (food.x < head.x ? -1 : 0);
+  const foodDirY = food.y > head.y ? 1 : (food.y < head.y ? -1 : 0);
+
+  // 11項目の状態情報を文字列キーにする
+  return [
+    isDanger(dirF),
+    isDanger(dirR),
+    isDanger(dirL),
+    dir.x, dir.y,
+    foodDirX, foodDirY
+  ].join(',');
+}
+
+function resetGame() {
+  snake = [
+    { x: 5, y: 5 },
+    { x: 4, y: 5 },
+    { x: 3, y: 5 }
+  ];
+  dir = { x: 1, y: 0 };
+  score = 0;
+  spawnFood();
+  episode++;
+  epsilon = Math.max(epsilonMin, epsilon * epsilonDecay);
+}
+
+function spawnFood() {
+  food = {
+    x: Math.floor(Math.random() * TILE_COUNT),
+    y: Math.floor(Math.random() * TILE_COUNT)
+  };
+  if (snake.some(s => s.x === food.x && s.y === food.y)) {
+    spawnFood();
+  }
+}
+
+// アクション（相対方向）を絶対方向ベクトルに変換
+function getNewDirection(action) {
+  if (action === 0) return dir; // 直進
+  if (action === 1) return { x: -dir.y, y: dir.x }; // 右折
+  if (action === 2) return { x: dir.y, y: -dir.x }; // 左折
+}
+
+function step() {
+  const state = getState();
+
+  // $\epsilon$-greedy 法による行動選択
+  let action;
+  if (Math.random() < epsilon) {
+    action = ACTIONS[Math.floor(Math.random() * ACTIONS.length)];
+  } else {
+    const qValues = [getQ(state, 0), getQ(state, 1), getQ(state, 2)];
+    action = qValues.indexOf(Math.max(...qValues));
+  }
+
+  const nextDir = getNewDirection(action);
+  dir = nextDir;
+
+  const newHead = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+  let reward = -0.1; // 1ステップごとの小さなペナルティ（遠回り防止）
+  let gameOver = false;
+
+  // 衝突判定
+  if (
+    newHead.x < 0 || newHead.x >= TILE_COUNT ||
+    newHead.y < 0 || newHead.y >= TILE_COUNT ||
+    snake.some(s => s.x === newHead.x && s.y === newHead.y)
+  ) {
+    reward = -10; // 死亡ペナルティ
+    gameOver = true;
+  } else {
+    snake.unshift(newHead);
+    if (newHead.x === food.x && newHead.y === food.y) {
+      reward = 10; // 餌獲得報酬
+      score++;
+      if (score > highScore) highScore = score;
+      spawnFood();
+    } else {
+      snake.pop();
+    }
+  }
+
+  // Q値の更新 (Bellman方程式)
+  const nextState = getState();
+  const maxNextQ = gameOver ? 0 : Math.max(...ACTIONS.map(a => getQ(nextState, a)));
+  const currentQ = getQ(state, action);
+  const newQ = currentQ + alpha * (reward + gamma * maxNextQ - currentQ);
+  setQ(state, action, newQ);
+
+  if (gameOver) {
+    resetGame();
+  }
+
+  draw();
+  updateStats();
+}
+
+function draw() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 蛇の描画
+  ctx.fillStyle = '#00ffcc';
+  snake.forEach((s, i) => {
+    if (i === 0) ctx.fillStyle = '#00ff66'; // 頭
+    else ctx.fillStyle = '#00cc66';
+    ctx.fillRect(s.x * GRID_SIZE, s.y * GRID_SIZE, GRID_SIZE - 1, GRID_SIZE - 1);
+  });
+
+  // 餌の描画
+  ctx.fillStyle = '#ff3366';
+  ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 1, GRID_SIZE - 1);
+}
+
+function updateStats() {
+  document.getElementById('episodes').innerText = episode;
+  document.getElementById('high-score').innerText = highScore;
+  document.getElementById('current-score').innerText = score;
+  document.getElementById('epsilon').innerText = epsilon.toFixed(3);
+  document.getElementById('q-size').innerText = Object.keys(QTable).length;
+}
+
+// ゲームループの管理
+let timer = null;
+function startLoop() {
+  if (timer) clearInterval(timer);
+  const speed = 101 - document.getElementById('speed').value;
+  timer = setInterval(step, speed);
+}
+
+document.getElementById('speed').addEventListener('input', startLoop);
+document.getElementById('reset-q').addEventListener('click', () => {
+  for (let key in QTable) delete QTable[key];
+  epsilon = 1.0;
+  resetGame();
+});
+
+resetGame();
+startLoop();
+</script>
+</body>
+</html>
