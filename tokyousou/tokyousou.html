@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>麺類＆フレンズ 爆走グランプリ</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f0f4f8;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #game-container {
+      width: 100%;
+      max-width: 480px;
+      height: 100vh;
+      max-height: 840px;
+      background-color: #e0f2fe;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      box-shadow: 0 0 20px rgba(0,0,0,0.15);
+    }
+    header {
+      background-color: #0284c7;
+      color: white;
+      padding: 10px;
+      text-align: center;
+      font-weight: bold;
+      font-size: 1.2rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    #track-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+      padding: 10px 0;
+      background: linear-gradient(to bottom, #7dd3fc, #bae6fd 30%, #fef08a 30%, #fef08a 35%, #cbd5e1 35%);
+      position: relative;
+    }
+    .lane {
+      height: 20%;
+      position: relative;
+      border-bottom: 2px dashed #94a3b8;
+      display: flex;
+      align-items: center;
+    }
+    .lane:last-child {
+      border-bottom: none;
+    }
+    .lane-label {
+      position: absolute;
+      left: 5px;
+      top: 2px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      color: #334155;
+      background: rgba(255,255,255,0.85);
+      padding: 1px 4px;
+      border-radius: 4px;
+      z-index: 2;
+    }
+    .finish-line {
+      position: absolute;
+      right: 40px;
+      top: 0;
+      bottom: 0;
+      width: 12px;
+      background: repeating-linear-gradient(
+        0deg,
+        #000,
+        #000 10px,
+        #fff 10px,
+        #fff 20px
+      );
+      z-index: 1;
+    }
+    .runner {
+      position: absolute;
+      left: 10px;
+      width: 50px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: left 0.1s linear;
+      z-index: 3;
+    }
+    .runner svg {
+      width: 100%;
+      height: 100%;
+      filter: drop-shadow(0px 3px 2px rgba(0,0,0,0.3));
+    }
+
+    .effects {
+      position: absolute;
+      font-size: 0.8rem;
+      font-weight: bold;
+      color: #ef4444;
+      animation: popup 0.5s ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes popup {
+      0% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-20px); }
+    }
+
+    /* コントロールエリア */
+    #controls {
+      height: 220px;
+      background-color: #0f172a;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #gauge-container {
+      width: 100%;
+      height: 16px;
+      background-color: #334155;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #475569;
+    }
+    #gauge-bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #ec4899);
+      transition: width 0.1s;
+    }
+    #btn-special {
+      width: 100%;
+      padding: 10px;
+      background-color: #64748b;
+      color: #94a3b8;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 1rem;
+      cursor: not-allowed;
+    }
+    #btn-special.ready {
+      background: linear-gradient(45deg, #f59e0b, #ef4444);
+      color: white;
+      cursor: pointer;
+      box-shadow: 0 0 10px #f59e0b;
+      animation: pulse 1s infinite alternate;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.02); }
+    }
+    .tap-buttons {
+      display: flex;
+      gap: 15px;
+      flex: 1;
+    }
+    .btn-tap {
+      flex: 1;
+      background-color: #2563eb;
+      color: white;
+      font-size: 1.8rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 6px 0 #1d4ed8;
+      cursor: pointer;
+    }
+    .btn-tap:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #1d4ed8;
+    }
+
+    /* モーダル表示 */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background-color: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      overflow-y: auto;
+    }
+    .overlay h2 { margin-top: 0; font-size: 1.5rem; margin-bottom: 10px; }
+    .section-title { font-size: 1rem; color: #38bdf8; margin: 10px 0 5px 0; font-weight: bold; }
+    
+    .diff-select {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    .diff-card {
+      flex: 1;
+      background-color: #1e293b;
+      border: 2px solid #475569;
+      border-radius: 6px;
+      padding: 8px 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: bold;
+    }
+    .diff-card.selected {
+      border-color: #ef4444;
+      background-color: #7f1d1d;
+    }
+
+    .char-select {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      width: 100%;
+      margin-bottom: 15px;
+    }
+    .char-card {
+      background-color: #1e293b;
+      border: 2px solid #475569;
+      border-radius: 8px;
+      padding: 8px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .char-card.selected {
+      border-color: #38bdf8;
+      background-color: #0369a1;
+    }
+    .char-card .icon-box {
+      width: 45px;
+      height: 45px;
+    }
+    .char-card .name { font-weight: bold; font-size: 0.8rem; margin-top: 4px; }
+    
+    .btn-start {
+      background-color: #22c55e;
+      color: white;
+      font-size: 1.1rem;
+      font-weight: bold;
+      padding: 10px 25px;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #15803d;
+    }
+    .btn-start:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #15803d;
+    }
+    #countdown {
+      font-size: 5rem;
+      font-weight: bold;
+      color: #facc15;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <header>麺類＆フレンズ 爆走グランプリ</header>
+
+  <!-- トラックエリア -->
+  <div id="track-area">
+    <div class="finish-line"></div>
+    
+    <!-- レーン0: じゃじゃ丸 -->
+    <div class="lane">
+      <span class="lane-label">じゃじゃ丸</span>
+      <div id="runner-0" class="runner"></div>
+    </div>
+    <!-- レーン1: れいぺん -->
+    <div class="lane">
+      <span class="lane-label">れいぺん</span>
+      <div id="runner-1" class="runner"></div>
+    </div>
+    <!-- レーン2: セキレイメン -->
+    <div class="lane">
+      <span class="lane-label">セキレイメン</span>
+      <div id="runner-2" class="runner"></div>
+    </div>
+    <!-- レーン3: 冷麺ダルマ -->
+    <div class="lane">
+      <span class="lane-label">冷麺ダルマ</span>
+      <div id="runner-3" class="runner"></div>
+    </div>
+  </div>
+
+  <!-- コントロールエリア -->
+  <div id="controls">
+    <div id="gauge-container">
+      <div id="gauge-bar"></div>
+    </div>
+    <button id="btn-special" onclick="useSpecial()">SPECIAL (未チャージ)</button>
+    <div class="tap-buttons">
+      <button class="btn-tap" onclick="tap('L')">L</button>
+      <button class="btn-tap" onclick="tap('R')">R</button>
+    </div>
+  </div>
+
+  <!-- スタート／設定選択モーダル -->
+  <div id="start-overlay" class="overlay">
+    <h2>ゲーム設定</h2>
+    
+    <div class="section-title">難易度を選択</div>
+    <div class="diff-select">
+      <div class="diff-card" onclick="selectDiff('easy')">かんたん</div>
+      <div class="diff-card selected" onclick="selectDiff('normal')">ふつう</div>
+      <div class="diff-card" onclick="selectDiff('hard')">むずかしい</div>
+    </div>
+
+    <div class="section-title">キャラクターを選択</div>
+    <div class="char-select">
+      <div class="char-card selected" onclick="selectChar(0)">
+        <div class="icon-box" id="card-icon-0"></div>
+        <div class="name">じゃじゃ丸</div>
+      </div>
+      <div class="char-card" onclick="selectChar(1)">
+        <div class="icon-box" id="card-icon-1"></div>
+        <div class="name">れいぺん</div>
+      </div>
+      <div class="char-card" onclick="selectChar(2)">
+        <div class="icon-box" id="card-icon-2"></div>
+        <div class="name">セキレイメン</div>
+      </div>
+      <div class="char-card" onclick="selectChar(3)">
+        <div class="icon-box" id="card-icon-3"></div>
+        <div class="name">冷麺ダルマ</div>
+      </div>
+    </div>
+    <button class="btn-start" onclick="startGame()">レーススタート！</button>
+  </div>
+
+  <!-- カウントダウンモーダル -->
+  <div id="countdown-overlay" class="overlay" style="display: none;">
+    <div id="countdown">3</div>
+  </div>
+
+  <!-- リザルトモーダル -->
+  <div id="result-overlay" class="overlay" style="display: none;">
+    <h2 id="result-title">GOAL!</h2>
+    <p id="result-rank" style="font-size: 1.5rem; font-weight: bold; color: #facc15;"></p>
+    <button class="btn-start" onclick="resetGame()">もう一度あそぶ</button>
+  </div>
+</div>
+
+<script>
+  // 各キャラのSVG定義
+  const CHAR_SVGS = [
+    // 0: じゃじゃ丸
+    `<svg viewBox="0 0 100 100">
+      <ellipse cx="50" cy="55" rx="38" ry="32" fill="#FDF3DC" stroke="#E5C396" stroke-width="2"/>
+      <ellipse cx="50" cy="30" rx="26" ry="12" fill="#7C4212"/>
+      <path d="M 35 28 Q 50 20 65 28" stroke="#522B0B" stroke-width="3" fill="none"/>
+      <path d="M 40 22 Q 55 12 60 20" stroke="#38A169" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <circle cx="68" cy="50" r="4" fill="#1E293B"/>
+      <ellipse cx="62" cy="58" rx="4" ry="3" fill="#F87171"/>
+      <path d="M 72 54 Q 75 58 72 62" stroke="#1E293B" stroke-width="2" fill="none"/>
+      <path d="M 30 60 H 70 V 75 Q 50 82 30 75 Z" fill="#FFF" stroke="#D1D5DB"/>
+      <text x="50" y="73" font-size="10" font-weight="bold" fill="#DC2626" text-anchor="middle">じゃ</text>
+      <ellipse cx="40" cy="88" rx="8" ry="4" fill="#F2D2A9"/>
+      <ellipse cx="60" cy="88" rx="8" ry="4" fill="#F2D2A9"/>
+    </svg>`,
+    // 1: れいぺん
+    `<svg viewBox="0 0 100 100">
+      <ellipse cx="50" cy="62" rx="30" ry="28" fill="#38BDF8"/>
+      <ellipse cx="50" cy="64" rx="20" ry="22" fill="#FFFFFF"/>
+      <circle cx="62" cy="52" r="3.5" fill="#1E293B"/>
+      <ellipse cx="56" cy="57" rx="3" ry="2" fill="#F87171"/>
+      <polygon points="68,54 78,57 68,60" fill="#F59E0B"/>
+      <ellipse cx="40" cy="90" rx="7" ry="4" fill="#F59E0B"/>
+      <ellipse cx="60" cy="90" rx="7" ry="4" fill="#F59E0B"/>
+      <path d="M 22 62 C 30 68, 70 68, 78 62" stroke="#BAE6FD" stroke-width="7" fill="none" stroke-linecap="round"/>
+      <ellipse cx="50" cy="32" rx="26" ry="10" fill="#FFFFFF" stroke="#94A3B8" stroke-width="2"/>
+      <ellipse cx="50" cy="30" rx="22" ry="7" fill="#FEF08A"/>
+      <polygon points="45,28 55,20 58,28" fill="#EF4444"/>
+      <ellipse cx="40" cy="28" rx="4" ry="3" fill="#FFFFFF"/>
+      <ellipse cx="40" cy="28" rx="2" ry="1.5" fill="#F59E0B"/>
+    </svg>`,
+    // 2: セキレイメン
+    `<svg viewBox="0 0 100 100">
+      <path d="M 20 40 Q 50 35 80 40 L 72 75 Q 50 85 28 75 Z" fill="#FFFFFF" stroke="#64748B" stroke-width="2"/>
+      <circle cx="50" cy="60" r="12" fill="none" stroke="#DC2626" stroke-width="3"/>
+      <path d="M 46 53 V 65 H 55" stroke="#DC2626" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="50" cy="28" r="16" fill="#FFFFFF" stroke="#64748B" stroke-width="1.5"/>
+      <path d="M 42 13 Q 50 15 58 13" stroke="#1E293B" stroke-width="4" fill="none"/>
+      <circle cx="60" cy="26" r="3" fill="#1E293B"/>
+      <circle cx="52" cy="32" r="3" fill="#EF4444"/>
+      <polygon points="64,28 73,28 66,32" fill="#1E293B"/>
+      <path d="M 35 80 L 25 92 M 35 80 L 35 93 M 35 80 L 45 92" stroke="#16A34A" stroke-width="4" stroke-linecap="round"/>
+      <path d="M 65 80 L 55 92 M 65 80 L 65 93 M 65 80 L 75 92" stroke="#16A34A" stroke-width="4" stroke-linecap="round"/>
+    </svg>`,
+    // 3: 冷麺ダルマ
+    `<svg viewBox="0 0 100 100">
+      <path d="M 18 20 Q 50 12 82 20 L 70 50 Q 50 58 30 50 Z" fill="#94A3B8" stroke="#475569" stroke-width="2"/>
+      <ellipse cx="50" cy="20" rx="32" ry="7" fill="#64748B"/>
+      <circle cx="68" cy="38" r="4" fill="#F59E0B"/>
+      <rect x="65" y="28" width="6" height="6" fill="#DC2626"/>
+      <rect x="25" y="52" width="50" height="40" rx="2" fill="#CBD5E1" stroke="#475569" stroke-width="2"/>
+      <rect x="18" y="60" width="7" height="20" fill="#DC2626"/>
+    </svg>`
+  ];
+
+  const CHARACTERS = [
+    { name: "じゃじゃ丸", speed: 1.0, specialMsg: "濃厚味噌ブースト！" },
+    { name: "れいぺん", speed: 1.1, specialMsg: "氷スライディング！" },
+    { name: "セキレイメン", speed: 0.95, specialMsg: "パタパタフライト！" },
+    { name: "冷麺ダルマ", speed: 1.05, specialMsg: "ドン・ストンプ！" }
+  ];
+
+  let selectedDifficulty = 'normal'; // デフォルトをふつうに引き上げ
+  let playerCharIndex = 0;
+  let isPlaying = false;
+  let lastTap = null;
+  let specialGauge = 0;
+  let positions = [0, 0, 0, 0];
+  let stunTicks = [0, 0, 0, 0];
+  let gameLoopId = null;
+
+  const FINISH_POS = 80;
+
+  window.onload = () => {
+    for (let i = 0; i < 4; i++) {
+      document.getElementById(`runner-${i}`).innerHTML = CHAR_SVGS[i];
+      document.getElementById(`card-icon-${i}`).innerHTML = CHAR_SVGS[i];
+    }
+  };
+
+  function selectDiff(diff) {
+    selectedDifficulty = diff;
+    document.querySelectorAll('.diff-card').forEach(card => {
+      const text = card.innerText;
+      let targetDiff = text.includes('かんたん') ? 'easy' : text.includes('ふつう') ? 'normal' : 'hard';
+      card.classList.toggle('selected', targetDiff === diff);
+    });
+  }
+
+  function selectChar(index) {
+    playerCharIndex = index;
+    document.querySelectorAll('.char-card').forEach((card, idx) => {
+      card.classList.toggle('selected', idx === index);
+    });
+  }
+
+  function startGame() {
+    document.getElementById('start-overlay').style.display = 'none';
+    const countOverlay = document.getElementById('countdown-overlay');
+    const countText = document.getElementById('countdown');
+    countOverlay.style.display = 'flex';
+    
+    let count = 3;
+    countText.innerText = count;
+    
+    const timer = setInterval(() => {
+      count--;
+      if (count > 0) {
+        countText.innerText = count;
+      } else if (count === 0) {
+        countText.innerText = "START!";
+      } else {
+        clearInterval(timer);
+        countOverlay.style.display = 'none';
+        isPlaying = true;
+        gameLoopId = setInterval(gameLoop, 100);
+      }
+    }, 800);
+  }
+
+  function tap(side) {
+    if (!isPlaying) return;
+    if (stunTicks[playerCharIndex] > 0) return;
+
+    // 難易度に応じて連打効率を少しシビアに（または据え置きでNPC側を強化）
+    let accel = 0.7;
+    if (lastTap !== side) {
+      accel = 1.35; // 交互連打の恩恵を少し調整
+      lastTap = side;
+    }
+
+    positions[playerCharIndex] += accel * CHARACTERS[playerCharIndex].speed;
+    
+    if (specialGauge < 100) {
+      specialGauge = Math.min(100, specialGauge + 3.5); // ゲージ溜まりを少し遅く
+      updateGaugeUI();
+    }
+
+    updatePositions();
+    checkGoal();
+  }
+
+  function useSpecial() {
+    if (!isPlaying || specialGauge < 100) return;
+
+    specialGauge = 0;
+    updateGaugeUI();
+
+    const char = CHARACTERS[playerCharIndex];
+    showEffect(playerCharIndex, char.specialMsg);
+
+    if (playerCharIndex === 0) {
+      positions[0] += 8;
+      for (let i = 0; i < 4; i++) if (i !== 0) stunTicks[i] = 10;
+    } else if (playerCharIndex === 1) {
+      positions[1] += 14;
+    } else if (playerCharIndex === 2) {
+      positions[2] += 12;
+    } else if (playerCharIndex === 3) {
+      for (let i = 0; i < 4; i++) if (i !== 3) stunTicks[i] = 18;
+    }
+
+    updatePositions();
+    checkGoal();
+  }
+
+  function updateGaugeUI() {
+    const bar = document.getElementById('gauge-bar');
+    const btn = document.getElementById('btn-special');
+    bar.style.width = `${specialGauge}%`;
+
+    if (specialGauge >= 100) {
+      btn.classList.add('ready');
+      btn.innerText = "SPECIAL発動可能！";
+    } else {
+      btn.classList.remove('ready');
+      btn.innerText = `SPECIAL (${Math.floor(specialGauge)}%)`;
+    }
+  }
+
+  function gameLoop() {
+    if (!isPlaying) return;
+
+    // 全体的にNPCの速度と加速を大幅アップ（高難易度化）
+    let baseNpcSpeed = 0.65;
+    let speedRange = 0.55;
+    let specialChance = 0.05;
+
+    if (selectedDifficulty === 'easy') {
+      baseNpcSpeed = 0.5;
+      speedRange = 0.4;
+      specialChance = 0.02;
+    } else if (selectedDifficulty === 'normal') {
+      baseNpcSpeed = 0.72; // 前より高速化
+      speedRange = 0.5;
+      specialChance = 0.04;
+    } else if (selectedDifficulty === 'hard') {
+      baseNpcSpeed = 0.88; // 鬼のような速さ
+      speedRange = 0.6;
+      specialChance = 0.07;
+    }
+
+    for (let i = 0; i < 4; i++) {
+      if (stunTicks[i] > 0) {
+        stunTicks[i]--;
+        continue;
+      }
+
+      if (i !== playerCharIndex) {
+        const randomSpeed = (Math.random() * speedRange + baseNpcSpeed) * CHARACTERS[i].speed;
+        positions[i] += randomSpeed;
+
+        // NPCの必殺技（ランダム加速・特殊行動）頻度アップ
+        if (Math.random() < specialChance) {
+          positions[i] += 4;
+        }
+      }
+    }
+
+    updatePositions();
+    checkGoal();
+  }
+
+  function updatePositions() {
+    for (let i = 0; i < 4; i++) {
+      const runner = document.getElementById(`runner-${i}`);
+      runner.style.left = `calc(10px + ${Math.min(positions[i], FINISH_POS)}%)`;
+    }
+  }
+
+  function showEffect(laneIndex, text) {
+    const lane = document.querySelectorAll('.lane')[laneIndex];
+    const effect = document.createElement('div');
+    effect.className = 'effects';
+    effect.innerText = text;
+    effect.style.left = '50%';
+    effect.style.top = '5px';
+    lane.appendChild(effect);
+    setTimeout(() => effect.remove(), 600);
+  }
+
+  function checkGoal() {
+    for (let i = 0; i < 4; i++) {
+      if (positions[i] >= FINISH_POS) {
+        endGame();
+        break;
+      }
+    }
+  }
+
+  function endGame() {
+    isPlaying = false;
+    clearInterval(gameLoopId);
+
+    const ranked = positions
+      .map((pos, idx) => ({ id: idx, pos }))
+      .sort((a, b) => b.pos - a.pos);
+
+    const playerRank = ranked.findIndex(r => r.id === playerCharIndex) + 1;
+
+    const resultOverlay = document.getElementById('result-overlay');
+    const resultRank = document.getElementById('result-rank');
+    
+    resultRank.innerText = `難易度: ${selectedDifficulty.toUpperCase()}\nあなたの結果: ${playerRank}位！`;
+    resultOverlay.style.display = 'flex';
+  }
+
+  function resetGame() {
+    positions = [0, 0, 0, 0];
+    stunTicks = [0, 0, 0, 0];
+    specialGauge = 0;
+    lastTap = null;
+    
+    updateGaugeUI();
+    updatePositions();
+
+    document.getElementById('result-overlay').style.display = 'none';
+    document.getElementById('start-overlay').style.display = 'flex';
+  }
+</script>
+</body>
+</html>
